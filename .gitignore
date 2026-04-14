@@ -1,11 +1,18 @@
-rootfs-alpha/
-rootfs-beta/
-rootfs-base/
-logs/
+# build files
 *.o
 *.ko
 *.mod
-*.mod.c
-modules.order
-Module.symvers
-*.tar.gz
+*.cmd
+*.order
+*.symvers
+
+# binaries
+engine
+memory_hog
+cpu_hog
+io_pulse
+test_ioctl
+
+# runtime
+logs/
+rootfs-*
