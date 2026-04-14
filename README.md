@@ -1,125 +1,199 @@
 # Multi-Container Runtime in C
 
-> A lightweight Linux container runtime featuring a long-running user-space supervisor and a real-time kernel-space memory monitoring module.
-
-![C](https://img.shields.io/badge/Language-C-00d4aa?style=flat-square)
-![Linux](https://img.shields.io/badge/Platform-Linux-4f9eff?style=flat-square)
-![Kernel](https://img.shields.io/badge/Kernel%20Module-LKM-ff6b6b?style=flat-square)
-![IPC](https://img.shields.io/badge/IPC-IOCTL-ffbe5a?style=flat-square)
-![License](https://img.shields.io/badge/Purpose-Academic-6b7a8d?style=flat-square)
+A lightweight Linux container runtime implemented in C, featuring a user-space supervisor, kernel-space memory monitoring, and a producer-consumer logging system.
 
 ---
 
-## Overview
+## Team
 
-This project implements a minimal container runtime entirely in C, demonstrating core operating systems concepts through hands-on systems programming. The runtime manages concurrent workload processes from user space while a companion kernel module tracks memory usage in real time — the two halves communicating cleanly via IOCTL system calls.
-
----
-
-## Features
-
-- **Runtime Supervisor** — A persistent `engine.c` process that orchestrates and manages all workload lifecycles
-- **Kernel Memory Monitor** — A loadable kernel module (`monitor.ko`) that accesses system memory internals directly
-- **IOCTL Bridge** — Clean, structured user↔kernel communication defined in a shared header
-- **Pluggable Workloads** — Modular CPU, memory, and IO stress generators to simulate diverse container behaviours
+| Member | SRN |
+|---|---|
+| P Mahema Sai | PES2UG24AM107 |
+| Nihira Hassan | PES2UG24AM106 |
 
 ---
 
-## Architecture
+## Build, Load & Run
 
-```
-.
-├── User Space
-│   ├── engine.c          →  Main runtime supervisor (long-running)
-│   ├── cpu_hog.c         →  CPU stress generator
-│   ├── memory_hog.c      →  Memory stress generator
-│   └── io_pulse.c        →  IO workload generator
-│
-├── Kernel Space
-│   ├── monitor.c         →  Kernel module (real-time memory tracking)
-│   └── monitor_ioctl.h   →  IOCTL interface (shared user↔kernel contract)
-│
-└── Build System
-    └── Makefile          →  Compiles kernel module and user-space binaries
-```
-
----
-
-## How It Works
-
-1. **Engine starts** — `engine.c` runs as a long-lived supervisor, ready to spawn and manage workload processes.
-2. **Workloads execute** — CPU, memory, and IO stress generators run concurrently, simulating real container activity.
-3. **Kernel watches** — `monitor.ko` tracks memory usage from inside the kernel with direct access to system internals.
-4. **IOCTL reports** — The engine queries the kernel module via `ioctl()` calls to retrieve live memory statistics.
-
-> All user↔kernel communication goes through `monitor_ioctl.h` — no shared memory, no sockets. Just clean system calls.
-
----
-
-## Setup & Execution
-
-### 1. Build
+### Build
 
 ```bash
-# Compiles the kernel module and all user-space binaries
 make
 ```
 
-### 2. Load the Kernel Module
+### Start the Supervisor
 
 ```bash
-# Insert the module (requires root)
-sudo insmod monitor.ko
-
-# Verify it loaded successfully
-lsmod | grep monitor
+sudo ./engine supervisor ./rootfs-base
 ```
 
-### 3. Run the Engine
+### Run Containers
 
 ```bash
-./engine
+sudo ./engine start alpha ./rootfs-alpha /cpu_hog --soft-mib 40 --hard-mib 80
+sudo ./engine start beta  ./rootfs-beta  /io_pulse --soft-mib 40 --hard-mib 80
 ```
 
----
+### List Containers
 
-## Workload Simulation
+```bash
+sudo ./engine ps
+```
 
-| Program | Resource | Description |
-|---|---|---|
-| `cpu_hog.c` | CPU | Spins tight computation loops to saturate processor cores |
-| `memory_hog.c` | Memory | Continuously allocates and accesses heap blocks to pressure RAM |
-| `io_pulse.c` | Disk IO | Issues bursty read/write cycles to simulate disk-bound workloads |
+### View Logs
 
----
+```bash
+sudo ./engine logs alpha
+sudo ./engine logs beta
+```
 
-## Key Concepts Demonstrated
+### Stop Containers
 
-- Linux Loadable Kernel Module (LKM) development
-- Process management and supervision in C
-- Real-time memory monitoring via kernel APIs
-- IOCTL system call design and implementation
-- User-space to kernel-space communication
-- System resource simulation and stress testing
+```bash
+sudo ./engine stop alpha
+sudo ./engine stop beta
+```
+
+### Check Kernel Logs (Memory Limits)
+
+```bash
+sudo dmesg | tail
+```
+
+Expected output: soft limit warning, followed by hard limit enforcement.
+
+### Verify No Zombie Processes
+
+```bash
+ps aux | grep defunct
+```
+
+Expected output: no `<defunct>` processes.
 
 ---
 
 ## Demo
 
-Screenshots available here: [View Demo](screenshots.md)
+### Multi-Container Supervision & Metadata Tracking
+
+Two containers (`alpha` and `beta`) are launched under a single supervisor process using the CLI. Each container is assigned a unique PID by the OS.
+
+The supervisor maintains metadata including container ID, PID, and current state (running, stopped).
+
+```bash
+sudo ./engine ps
+```
+
+Displays all active containers, confirming correct lifecycle management and multi-container supervision.
 
 ---
 
-## Requirements & Notes
+### CLI & IPC Communication
 
-> ⚠️ **Linux only.** Tested on Ubuntu 22.04 LTS. Other distributions may require minor adjustments to the Makefile.
+The system follows a client-server architecture:
 
-> 🔐 **Root required** for `insmod` and kernel module operations.
+- The supervisor runs as a long-lived process.
+- CLI commands communicate with the supervisor over UNIX domain sockets.
+
+When a command like:
+
+```bash
+sudo ./engine start alpha ./rootfs-alpha /cpu_hog --soft-mib 40 --hard-mib 80
+```
+
+is executed, it is sent to the supervisor, which parses the command, creates a new container process, applies namespace isolation, and registers the container.
 
 ---
 
-## Author
+### Bounded-Buffer Logging & IPC
 
-**P Mahema Sai** — SRN: PES2UG24AM107  
-**Nihira Hassan** — SRN: PES2UG24AM106  
-4B-CSE(AIML) · Operating Systems Course
+Each container's output is captured using pipes. A producer-consumer model is used:
+
+- **Producer thread** reads container output.
+- Data is stored in a **bounded buffer**.
+- **Consumer thread** writes logs to files.
+
+Logs are stored at `logs/alpha.log` and `logs/beta.log`.
+
+```bash
+sudo ./engine logs alpha
+```
+
+This ensures non-blocking logging, no data loss, and proper synchronization.
+
+---
+
+### Scheduling Experiments
+
+Containers run different workloads:
+
+```bash
+sudo ./engine start alpha ./rootfs-alpha /cpu_hog --soft-mib 40 --hard-mib 80
+sudo ./engine start beta  ./rootfs-beta  /io_pulse --soft-mib 40 --hard-mib 80
+```
+
+| Container | Workload | Behaviour |
+|---|---|---|
+| alpha | cpu_hog | High CPU usage, continuous execution |
+| beta | io_pulse | Lower CPU usage, intermittent execution |
+
+This demonstrates how the Linux CFS scheduler allocates CPU time based on process behaviour — CPU-bound processes consume more CPU time, while I/O-bound processes yield during wait states.
+
+---
+
+### Kernel-Level Memory Monitoring
+
+Containers are started with memory limits:
+
+```bash
+--soft-mib 40 --hard-mib 80
+```
+
+```bash
+sudo dmesg | tail
+```
+
+Expected output:
+
+- Soft limit warning message
+- Hard limit enforcement (process termination)
+
+This demonstrates kernel-level resource monitoring and IOCTL-based communication between user space and kernel space.
+
+---
+
+### Clean Teardown
+
+```bash
+sudo ./engine stop alpha
+sudo ./engine stop beta
+ps aux | grep defunct
+```
+
+Expected: no zombie processes, confirming proper lifecycle management and resource cleanup.
+
+---
+
+## Key Concepts
+
+- Linux namespaces (PID, mount, UTS)
+- Process lifecycle management
+- Inter-process communication (pipes, UNIX sockets)
+- Producer-consumer synchronization
+- Kernel module programming
+- Memory monitoring via IOCTL
+- Linux scheduling (CFS)
+
+---
+
+## Notes
+
+- Tested on Linux (Ubuntu)
+- Root privileges required for kernel module operations
+- Designed for academic learning purposes
+
+---
+
+## Demo Screenshots
+
+[View Screenshots](screenshots.md)
