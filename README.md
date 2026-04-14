@@ -104,6 +104,12 @@ lsmod | grep monitor
 
 ---
 
+## Demo
+
+Screenshots available here: [View Demo](screenshots.md)
+
+---
+
 ## Requirements & Notes
 
 > ⚠️ **Linux only.** Tested on Ubuntu 22.04 LTS. Other distributions may require minor adjustments to the Makefile.
