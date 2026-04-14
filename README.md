@@ -186,6 +186,24 @@ Expected: no zombie processes, confirming proper lifecycle management and resour
 
 ---
 
+## System Architecture
+CLI
+↓
+UNIX Socket (IPC)
+↓
+Supervisor (engine.c)
+├── Container creation (clone + namespaces)
+├── Logging (pipe → bounded buffer → thread)
+├── Metadata tracking
+└── ioctl → Kernel module
+
+Kernel Module (monitor.c)
+├── Memory tracking
+├── Soft limit warning
+└── Hard limit enforcement
+
+---
+
 ## Notes
 
 - Tested on Linux (Ubuntu)
@@ -197,3 +215,9 @@ Expected: no zombie processes, confirming proper lifecycle management and resour
 ## Demo Screenshots
 
 [View Screenshots](screenshots.md)
+
+---
+
+## Conclusion
+
+This project demonstrates the design of a simplified container runtime combining user-space process management with kernel-level resource enforcement. It highlights key operating system concepts such as isolation, synchronization, IPC, and scheduling in a practical implementation.
