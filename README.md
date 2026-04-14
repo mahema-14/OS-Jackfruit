@@ -1,93 +1,119 @@
-# Multi-Container Runtime
+# Multi-Container Runtime in C
 
-A lightweight Linux container runtime in C with a long-running supervisor and a kernel-space memory monitor.
+> A lightweight Linux container runtime featuring a long-running user-space supervisor and a real-time kernel-space memory monitoring module.
 
-Read [`project-guide.md`](project-guide.md) for the full project specification.
+![C](https://img.shields.io/badge/Language-C-00d4aa?style=flat-square)
+![Linux](https://img.shields.io/badge/Platform-Linux-4f9eff?style=flat-square)
+![Kernel](https://img.shields.io/badge/Kernel%20Module-LKM-ff6b6b?style=flat-square)
+![IPC](https://img.shields.io/badge/IPC-IOCTL-ffbe5a?style=flat-square)
+![License](https://img.shields.io/badge/Purpose-Academic-6b7a8d?style=flat-square)
 
 ---
 
-## Getting Started
+## Overview
 
-### 1. Fork the Repository
+This project implements a minimal container runtime entirely in C, demonstrating core operating systems concepts through hands-on systems programming. The runtime manages concurrent workload processes from user space while a companion kernel module tracks memory usage in real time — the two halves communicating cleanly via IOCTL system calls.
 
-1. Go to [github.com/shivangjhalani/OS-Jackfruit](https://github.com/shivangjhalani/OS-Jackfruit)
-2. Click **Fork** (top-right)
-3. Clone your fork:
+---
 
-```bash
-git clone https://github.com/<your-username>/OS-Jackfruit.git
-cd OS-Jackfruit
+## Features
+
+- **Runtime Supervisor** — A persistent `engine.c` process that orchestrates and manages all workload lifecycles
+- **Kernel Memory Monitor** — A loadable kernel module (`monitor.ko`) that accesses system memory internals directly
+- **IOCTL Bridge** — Clean, structured user↔kernel communication defined in a shared header
+- **Pluggable Workloads** — Modular CPU, memory, and IO stress generators to simulate diverse container behaviours
+
+---
+
+## Architecture
+
+```
+.
+├── User Space
+│   ├── engine.c          →  Main runtime supervisor (long-running)
+│   ├── cpu_hog.c         →  CPU stress generator
+│   ├── memory_hog.c      →  Memory stress generator
+│   └── io_pulse.c        →  IO workload generator
+│
+├── Kernel Space
+│   ├── monitor.c         →  Kernel module (real-time memory tracking)
+│   └── monitor_ioctl.h   →  IOCTL interface (shared user↔kernel contract)
+│
+└── Build System
+    └── Makefile          →  Compiles kernel module and user-space binaries
 ```
 
-### 2. Set Up Your VM
+---
 
-You need an **Ubuntu 22.04 or 24.04** VM with **Secure Boot OFF**. WSL will not work.
+## How It Works
 
-Install dependencies:
+1. **Engine starts** — `engine.c` runs as a long-lived supervisor, ready to spawn and manage workload processes.
+2. **Workloads execute** — CPU, memory, and IO stress generators run concurrently, simulating real container activity.
+3. **Kernel watches** — `monitor.ko` tracks memory usage from inside the kernel with direct access to system internals.
+4. **IOCTL reports** — The engine queries the kernel module via `ioctl()` calls to retrieve live memory statistics.
 
-```bash
-sudo apt update
-sudo apt install -y build-essential linux-headers-$(uname -r)
-```
+> All user↔kernel communication goes through `monitor_ioctl.h` — no shared memory, no sockets. Just clean system calls.
 
-### 3. Run the Environment Check
+---
 
-```bash
-cd boilerplate
-chmod +x environment-check.sh
-sudo ./environment-check.sh
-```
+## Setup & Execution
 
-Fix any issues reported before moving on.
-
-### 4. Prepare the Root Filesystem
+### 1. Build
 
 ```bash
-mkdir rootfs-base
-wget https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-minirootfs-3.20.3-x86_64.tar.gz
-tar -xzf alpine-minirootfs-3.20.3-x86_64.tar.gz -C rootfs-base
-
-# Make one writable copy per container you plan to run
-cp -a ./rootfs-base ./rootfs-alpha
-cp -a ./rootfs-base ./rootfs-beta
-```
-
-Do not commit `rootfs-base/` or `rootfs-*` directories to your repository.
-
-### 5. Understand the Boilerplate
-
-The `boilerplate/` folder contains starter files:
-
-| File                   | Purpose                                             |
-| ---------------------- | --------------------------------------------------- |
-| `engine.c`             | User-space runtime and supervisor skeleton          |
-| `monitor.c`            | Kernel module skeleton                              |
-| `monitor_ioctl.h`      | Shared ioctl command definitions                    |
-| `Makefile`             | Build targets for both user-space and kernel module |
-| `cpu_hog.c`            | CPU-bound test workload                             |
-| `io_pulse.c`           | I/O-bound test workload                             |
-| `memory_hog.c`         | Memory-consuming test workload                      |
-| `environment-check.sh` | VM environment preflight check                      |
-
-Use these as your starting point. You are free to restructure the repository however you want — the submission requirements are listed in the project guide.
-
-### 6. Build and Verify
-
-```bash
-cd boilerplate
+# Compiles the kernel module and all user-space binaries
 make
 ```
 
-If this compiles without errors, your environment is ready.
+### 2. Load the Kernel Module
+
+```bash
+# Insert the module (requires root)
+sudo insmod monitor.ko
+
+# Verify it loaded successfully
+lsmod | grep monitor
+```
+
+### 3. Run the Engine
+
+```bash
+./engine
+```
 
 ---
 
-## What to Do Next
+## Workload Simulation
 
-Read [`project-guide.md`](project-guide.md) end to end. It contains:
+| Program | Resource | Description |
+|---|---|---|
+| `cpu_hog.c` | CPU | Spins tight computation loops to saturate processor cores |
+| `memory_hog.c` | Memory | Continuously allocates and accesses heap blocks to pressure RAM |
+| `io_pulse.c` | Disk IO | Issues bursty read/write cycles to simulate disk-bound workloads |
 
-- The six implementation tasks (multi-container runtime, CLI, logging, kernel monitor, scheduling experiments, cleanup)
-- The engineering analysis you must write
-- The exact submission requirements, including what your `README.md` must contain (screenshots, analysis, design decisions)
+---
 
-Your fork's `README.md` should be replaced with your own project documentation as described in the submission package section of the project guide. (As in get rid of all the above content and replace with your README.md)
+## Key Concepts Demonstrated
+
+- Linux Loadable Kernel Module (LKM) development
+- Process management and supervision in C
+- Real-time memory monitoring via kernel APIs
+- IOCTL system call design and implementation
+- User-space to kernel-space communication
+- System resource simulation and stress testing
+
+---
+
+## Requirements & Notes
+
+> ⚠️ **Linux only.** Tested on Ubuntu 22.04 LTS. Other distributions may require minor adjustments to the Makefile.
+
+> 🔐 **Root required** for `insmod` and kernel module operations.
+
+---
+
+## Author
+
+**P Mahema Sai** — SRN: PES2UG24AM107  
+**Nihira Hassan** — SRN: PES2UG24AM106  
+4B-CSE(AIML) · Operating Systems Course
