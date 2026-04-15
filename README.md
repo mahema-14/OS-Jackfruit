@@ -125,19 +125,30 @@ This ensures non-blocking logging, no data loss, and proper synchronization.
 
 ### Scheduling Experiments
 
-Containers run different workloads:
+### Objective
+To analyze the effect of process priority on CPU scheduling using different nice values.
+
+### Commands Used
 
 ```bash
-sudo ./engine start alpha ./rootfs-alpha /cpu_hog --soft-mib 40 --hard-mib 80
-sudo ./engine start beta  ./rootfs-beta  /io_pulse --soft-mib 40 --hard-mib 80
+time sudo ./engine start s1 ./rootfs-alpha "yes" --nice 0
+time sudo ./engine start s2 ./rootfs-alpha "yes" --nice 10
+
 ```
+### Workload Description
+Both containers execute the `yes` command, which is a CPU-bound workload (infinite loop).  
+The only difference between the two containers is their **nice value**, which controls scheduling priority.
+### Results
 
-| Container | Workload | Behaviour |
-|---|---|---|
-| alpha | cpu_hog | High CPU usage, continuous execution |
-| beta | io_pulse | Lower CPU usage, intermittent execution |
+| Container | Nice Value | Priority | Execution Time |
+|-----------|------------|----------|----------------|
+| s1        | 0          | High     | ~3.18 seconds  |
+| s2        | 10         | Low      | ~0.08 seconds  |
 
-This demonstrates how the Linux CFS scheduler allocates CPU time based on process behaviour — CPU-bound processes consume more CPU time, while I/O-bound processes yield during wait states.
+### Observation
+- Container **s1** (nice = 0) received more CPU time and ran longer.  
+- Container **s2** (nice = 10) received less CPU time and completed faster.  
+- Increasing the nice value reduces the scheduling priority of a process.
 
 ---
 
